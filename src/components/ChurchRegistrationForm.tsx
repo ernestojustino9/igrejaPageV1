@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Church,
@@ -31,7 +31,15 @@ const slideVariants = {
   }),
 };
 
-const ChurchRegistrationForm = () => {
+interface ChurchRegistrationFormProps {
+  selectedPlanId?: string | null;
+  selectedPlanName?: string | null;
+}
+
+const ChurchRegistrationForm = ({
+  selectedPlanId,
+  selectedPlanName,
+}: ChurchRegistrationFormProps) => {
   const [step, setStep] = useState(1);
   const [direction, setDirection] = useState(1);
   const [formData, setFormData] = useState({
@@ -46,8 +54,23 @@ const ChurchRegistrationForm = () => {
     members: "",
     description: "",
   });
+  const [municipios, setMunicipios] = useState<any[]>([]);
   const [completed, setCompleted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    fetch("http://localhost:3001/api/municipios/listar")
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setMunicipios(data);
+        } else {
+          console.error("Dados de municípios não são um array:", data);
+          setMunicipios([]);
+        }
+      })
+      .catch((err) => console.error("Erro ao buscar municípios:", err));
+  }, []);
 
   const updateField = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -66,6 +89,27 @@ const ChurchRegistrationForm = () => {
         toast({ title: "As senhas não coincidem", variant: "destructive" });
         return;
       }
+
+      // Validação de E-mail Único
+      setIsLoading(true);
+      fetch(`http://localhost:3001/api/user/check-email/${formData.email}`)
+        .then(async (res) => {
+          if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.message || "E-mail já cadastrado");
+          }
+          setDirection(1);
+          setStep((s) => s + 1);
+        })
+        .catch((err) => {
+          toast({
+            title: "Erro de validação",
+            description: err.message,
+            variant: "destructive",
+          });
+        })
+        .finally(() => setIsLoading(false));
+      return; // O avanço é controlado pelo fetch
     }
     if (step === 2) {
       if (!formData.churchName || !formData.pastorName) {
@@ -89,7 +133,7 @@ const ChurchRegistrationForm = () => {
     setIsLoading(true);
     try {
       const response = await fetch(
-        "http://localhost:3001/user/progressive-registration",
+        "http://localhost:3001/api/user/progressive-registration",
         {
           method: "POST",
           headers: {
@@ -105,6 +149,8 @@ const ChurchRegistrationForm = () => {
             phone: formData.phone,
             members: formData.members,
             description: formData.description,
+            planoId: selectedPlanId,
+            plano: selectedPlanName,
           }),
         },
       );
@@ -304,14 +350,20 @@ const ChurchRegistrationForm = () => {
                   </div>
                   <div className="space-y-2">
                     <Label className="font-body flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-primary" /> Cidade
+                      <MapPin className="w-4 h-4 text-primary" /> Município
                     </Label>
-                    <Input
-                      placeholder="São Paulo"
+                    <select
                       value={formData.city}
                       onChange={(e) => updateField("city", e.target.value)}
-                      className="font-body"
-                    />
+                      className="w-full h-10 px-3 rounded-md border border-input bg-background font-body text-sm"
+                    >
+                      <option value="">Selecione um município</option>
+                      {municipios.map((m) => (
+                        <option key={m.id} value={m.nome}>
+                          {m.nome}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div className="space-y-2">
                     <Label className="font-body flex items-center gap-2">
